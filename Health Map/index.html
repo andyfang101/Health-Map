@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+
+
+<style>
+
+</style>
+
+
+<head>
+
+<script src="//d3js.org/d3.v3.min.js"></script>
+<script src="//d3js.org/topojson.v1.min.js"></script>
+<script src="county-map.js"></script>
+<script src="county-radargraph.js"></script>
+<script src="radar-chart.js"></script>
+<link rel="stylesheet" type="text/css" href="style.css">
+<link rel="stylesheet" type="text/css" href="radar-chart.css">
+<link href='https://fonts.googleapis.com/css?family=Raleway' rel='stylesheet' type='text/css'>
+<link rel="stylesheet" href="http://yui.yahooapis.com/pure/0.5.0/pure-min.css">
+<link rel="stylesheet" href="https://rawgit.com/tpreusse/radar-chart-d3/master/src/radar-chart.css">
+
+</head>
+
+<h1> NOMNATION: Food Environments and Health in the U.S. </h1>
+<h3> explore food factors and nutrition health risks across the nation. </h3>
+
+<body>
+<div class="pure-g">
+<div class="pure-u-3-5" id="left-side">
+  <div id="search">
+    <p>Search for a county here or find it on the map below</p>
+    <input type="text" id="search-field">
+    <select type="text" id="state-select">
+        <option value="" disabled selected>State</option>
+    </select>
+    <button class="pure-button" onclick="searchCounties()">Get County</button> 
+  </div>
+  <div id="county-map"></div>
+  <div class="pure-u-1" id="map-controls">
+    <button class="pure-button pure-button-active" id="obesity-button"
+    onclick="toObesity()">OBESITY</button>
+    <button class="pure-button" id="diabetes-button"
+    onclick="toDiabetes()">DIABETES</button>
+    <button class="pure-button" id="insecurity-button"
+    onclick="toInsecurity()">FOOD INSECURITY</button>
+    <button class="pure-button" id="car-access-button"
+    onclick="toCarAccess()">NO CAR ACCESS</button>
+    <button class="pure-button" id="store-access-button"
+    onclick="toStoreAccess()">POPULATION ACCESS</button>
+
+      <svg id="legend" width="300" height="50">
+        <rect width="50" height="15" style="fill:#dadaeb;" id="rect0"/>
+        <text x="6" y="32" font-family="Raleway" font-size="14px" fill="white" id="text0">0-10%</text>
+        <rect x="60" width="50" height="15" style="fill:#bcbddc;" id="rect1"/>
+        <text x="62" y="32" font-family="Raleway" font-size="14px" fill="white" id="text1">10-20%</text>
+        <rect x="120" width="50" height="15" style="fill:#9e9ac8;" id="rect2"/>
+        <text x="122" y="32" font-family="Raleway" font-size="14px" fill="white" id="text2">20-30%</text>
+        <rect x="180" width="50" height="15" style="fill:#756bb1;" id="rect3"/>
+        <text x="182" y="32" font-family="Raleway" font-size="14px" fill="white" id="text3">30-40%</text>
+        <rect x="240" width="50" height="15" style="fill:#54278f;" id="rect4"/>
+        <text x="250" y="32" font-family="Raleway" font-size="14px" fill="white" id="text4">40%+</text>
+      </svg>
+    </div>
+</div>
+
+<div class="pure-u-2-5" id="right-side">
+    <div id="dod-text" class="dod1 pure-u-1-3"><p></p></div>
+    <div id="dod-text" class="dod2 pure-u-1-3"><p></p></div>
+    <div id="dod-text" class="dod3 pure-u-1-3"><p></p></div>
+    <div class="pure-u-1"></div>
+    <div style="font-family: Raleway" id="chart"></div>
+    <button class="pure-button" id="clear-graph-button"
+      onclick="clearGraph()">CLEAR</button>
+  </div>
+</div>
+<!--end of grid-->
+
+<script src="//d3js.org/d3.v3.min.js"></script>
+<script src="//d3js.org/queue.v1.min.js"></script>
+<script src="//d3js.org/topojson.v1.min.js"></script>
+<script src="lib.js"></script>
+<script>
+
+document.getElementById("search-field").placeholder = "Type County Name Here...";
+
+var obesityMap = true;
+var diabetesMap = false;
+var insecurityMap = false;
+var storeAccessMap = false;
+var noCarMap = false;
+
+var valueStorage = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]; //Array containing values for the 3 intended graphs. first 5 values are obesity, diabetes, houselow, populow, insecurity for first layer graph. second 5 are for second layer, last 5 are for final layer.
+
+var maxLayers = 3; //max number of Layers you can have on a radar Graph
+var numLayers = 0; 
+
+var width = 960,
+    height = 500;
+
+//Range of colors for obesity rate
+var color = d3.scale.threshold()
+    .domain([0, 10, 20, 30, 40])
+    .range(["#f2f0f7", "#dadaeb", "#bcbddc", "#9e9ac8", "#756bb1", "#54278f"]);
+
+var path = d3.geo.path();
+
+var svg = d3.select("body").select("#county-map").append("svg")
+    .attr("width", width)
+    .attr("height", height);
+
+var tooltip = d3.select("body").append("div")
+    .attr("class", "tooltip")
+    .style("opacity", 0);
+
+//sets up the zoom variable to interacting with the map
+var zoom = d3.behavior.zoom()
+    .translate([0, 0])
+    .scale(1)
+    .scaleExtent([0, 8])
+    .on("zoom", zoomed);
+
+var svg2 = svg.append("g");
+
+svg.append("rect")
+    .attr("class", "overlay")
+    .attr("width", width)
+    .attr("height", height)
+    .call(zoom);
+
+//allows us to look at both the .json and the .csv files
+queue()
+    .defer(d3.json, "/us.json")
+    .defer(d3.csv, "DataNeeded.csv")
+    .await(ready);
+
+window.addEventListener("keydown", keyIsDown, false);
+window.addEventListener("keyup", keyIsUp, false);
+
+var previousId = 0;
+var prevIdClicked = 0;
+
+var rateById = {}; //adult obesity rate
+var diabetesById = {}; //adult diabetes rate
+var houseLowById = {}; //households no car and low access to store percentage
+var popuLowById = {}; //total population and low access to storage percentage
+var insecurityById = {}; //household food insecurity
+
+var countyName = {};
+var countyState = {};
+
+var countiesMap = d3.map();
+var cntyFipsMap = d3.map();
+var counter=0;
+var counter2=0;
+var allStates = [];
+ var dropdown;
+
+function ready(error, us, obesity) {
+  if (error) throw error;
+
+  obesity.forEach(function(d) {
+
+    var FipsId;
+    if (d['FIPS'][0] == '0'){
+      FipsId = d['FIPS'].substring(1);
+    } else {
+      FipsId = d['FIPS'];
+    }
+
+    //creates arrays to store data of the variables for each county
+    rateById[FipsId] = +d['PCT_OBESE_ADULTS10'];
+    diabetesById[FipsId] = +d['PCT_DIABETES_ADULTS10'];
+    houseLowById[FipsId] = +d['PCT_LACCESS_HHNV10'];
+    popuLowById[FipsId] = +d['PCT_LACCESS_POP10'];
+    insecurityById[FipsId] = +d['FOODINSEC_10_12'];
+
+
+    countyName[FipsId] = d['County']; //array of county names
+    countyState[FipsId] = d['State']; //aray of state names
+
+      if(!countiesMap.has(d['State'])){
+        countiesMap.set(d['State'], [d['FIPS']]);
+        allStates[counter] = d['State'];
+        counter++;
+      }else{
+        countiesMap.get(d['State']).push(d['FIPS']);
+      }
+
+     if(!cntyFipsMap.has(d['County'])){
+        cntyFipsMap.set(d['County'], [d['FIPS']]);
+        counter2++;
+      }else{
+        cntyFipsMap.get(d['County']).push(d['FIPS']);
+      }
+
+  });
+
+d3.select("body").select("#state-select")
+      .selectAll("option")
+      .data(countiesMap.keys())
+      .enter()
+      .append("option")
+      .attr("value", function(d){return d;})
+      .text(function(d){return d;});
+
+
+    d3.select("body").select("#state-select")
+      .on("change", function(){
+        dropdown = allStates[this.selectedIndex];
+        //console.log("dropdown: " + dropdown);
+      });
+
+  //draws the map with the county colors based off obesity rate
+  svg2.append("g")
+      .attr("class", "counties")
+    .selectAll("path")
+      .data(topojson.feature(us, us.objects.counties).features)
+    .enter().append("path")
+      .attr("d", path)
+      .style("fill", function(d) { return color(rateById[d['id']]); })
+      .on("mouseover", function(d){ highlight(d['id']); })
+      .on("click", function(d){ clicked(d['id']); });
+      
+  svg2.append("path")
+      .datum(topojson.mesh(us, us.objects.states, function(a, b) { return a !== b; }))
+      .attr("class", "states")
+      .attr("d", path);
+
+  svg2.append("tooltip")
+    .data(rateById, topojson.feature(us,us.objects.counties).features)
+    .on("mouseover", function(d, s){
+           // show the tool tip
+            tooltip.transition()
+                 .duration(200)
+                 .style("opacity", .75);
+
+            // fill to the tool tip with the appropriate data
+            tooltip.html("<strong>" + d['FIPS'])
+                 .style("left", (d3.event.pageX + 5) + "px")
+                 .style("top", (d3.event.pageY - 28) + "px");
+        })
+        .on("mouseout", function(d) {
+            // hide the tooltip
+            tooltip.transition()
+                 .duration(500)
+                 .style("opacity", 0);
+        });
+
+}
+
+
+//this is used for scaling the map when you zoom in and out
+function zoomed() {
+  svg2.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
+  svg2.select(".counties").style("stroke-width", .5 / d3.event.scale + "px");
+  svg2.select(".states").style("stroke-width", 1.5 / d3.event.scale + "px");
+}
+
+//This function highlights the county that your map is over grey
+function highlight(id){
+  //makes the county the mouse is on grey
+  svg2.selectAll("path")
+    .filter(function(d){ return d['id'] == id; })
+    .transition()
+    .duration(50)
+    .style("fill", "#505050");
+  //puts the color of previously highlighted country back to original
+  svg2.selectAll("path")
+    .filter(function(d){return d['id'] == previousId; })
+    .transition()
+    .duration(50)
+    .style("fill", function(d) { 
+      if (valueStorage[18] == previousId || valueStorage[19] == previousId || valueStorage[20] == previousId){
+        return "green";
+      } else {
+        if (obesityMap){
+          return color(rateById[previousId]);
+        } else if (diabetesMap){
+          return color(diabetesById[previousId]);
+        } else if (insecurityMap){
+          return color(insecurityById[previousId]);
+        } else if (noCarMap){
+          return color(houseLowById[previousId]);
+        } else {
+          return color(popuLowById[previousId])
+        }
+      }
+    });
+
+  previousId = id;
+}
+
+/*
+* This function does a number of things when a county is clicked on
+* Including:
+* adding it to the radar chart array and making the radar chart
+* adding the selected county names above the radar graph
+* Making the color of selected coutries green
+*/
+function clicked(id){
+  if(numLayers <3){
+
+      numLayers++; //numLayers starts at 0, increment on click
+
+  	/*
+    * Cases to overlap up to three layers max on the radar graph
+    *
+    */
+  	if (numLayers == 1){  //first layer
+  		valueStorage[0] = countyName[id];
+  		valueStorage[1] = rateById[id];
+  		valueStorage[2] = diabetesById[id];
+  		valueStorage[3] = houseLowById[id];
+  		valueStorage[4] = popuLowById[id];
+  		valueStorage[5] = insecurityById[id];
+      valueStorage[18] = id;
+  	}
+
+  	if (numLayers == 2){ //second layer
+  		valueStorage[6] = countyName[id];
+  		valueStorage[7] = rateById[id];
+  		valueStorage[8] = diabetesById[id];
+  		valueStorage[9] = houseLowById[id];
+  		valueStorage[10] = popuLowById[id];
+  		valueStorage[11] = insecurityById[id];
+      valueStorage[19] = id;
+  	}
+
+  	if (numLayers == 3){ //third layer
+  		valueStorage[12] = countyName[id];
+  		valueStorage[13] = rateById[id];
+  		valueStorage[14] = diabetesById[id];
+  		valueStorage[15] = houseLowById[id];
+  		valueStorage[16] = popuLowById[id];
+  		valueStorage[17] = insecurityById[id];
+      valueStorage[20] = id;
+  	}
+
+  	var data = [
+  		{ 
+  		  	//first layer axes
+          className: "County: "+valueStorage[0], 
+  		  	axes: [ 
+  		        {axis: "Households, no car & low access to store", value: valueStorage[3]},
+  		        {axis: "Household Food Insecurity", value: valueStorage[5]},
+  			     {axis: "Population, low access to store", value: valueStorage[4]},
+  		        {axis: "Adult Obesity Rates", value: valueStorage[1]}, 
+  		        {axis: "Adult Diabetes Rates", value: valueStorage[2]}
+  		    ]
+  		},
+  		{
+          //second layer axes
+  			className: valueStorage[6],
+  			axes: [
+  				{axis: "Households, no car & low access to store", value: valueStorage[9]},
+  		        {axis: "Household Food Insecurity", value: valueStorage[11]},
+  			    {axis: "Population, low access to store", value: valueStorage[10]},
+  		        {axis: "Adult Obesity Rates", value: valueStorage[7]}, 
+  		        {axis: "Adult Diabetes Rates", value: valueStorage[8]}
+  		    ]
+  		},
+  		{
+          //third layer axes
+  			className: valueStorage[12],
+  			axes: [
+  				{axis: "Households, no car & low access to store", value: valueStorage[15]},
+  		        {axis: "Household Food Insecurity", value: valueStorage[17]},
+  			    {axis: "Population, low access to store", value: valueStorage[16]},
+  		        {axis: "Adult Obesity Rates", value: valueStorage[13]}, 
+  		    	{axis: "Adult Diabetes Rates", value: valueStorage[14]}
+  		    ]
+  		}
+  	];
+
+  	RadarChart.draw("#chart",data);
+
+    //Writing the county names that are being displayed on the Radar Chart above the radar chart
+    d3.select("body").select(".dod1")
+      .select("p")
+      .html(
+        "County: " + countyName[valueStorage[18]] + ", " + countyState[valueStorage[18]]
+        )
+      .style("color", "#70a1cc");
+    if (numLayers >= 2){
+      d3.select("body").select(".dod2")
+        .select("p")
+        .html(
+          "County: " + countyName[valueStorage[19]] + ", " + countyState[valueStorage[19]]
+          )
+        .style("color", "#ffa600");
+    }
+    if (numLayers >= 3){
+      d3.select("body").select(".dod3")
+        .select("p")
+        .html(
+          "County: " + countyName[valueStorage[20]] + ", " + countyState[valueStorage[20]]
+          )
+        .style("color", "#8ce374");
+    }
+
+    svg2.selectAll("path")
+      .filter(function(d){ return id == d['id']; })
+      .style("fill", "green");
+
+    prevIdClicked = id;
+  }
+}
+
+//detects if the "a" key has been pressed and allows the user to click on the map
+function keyIsDown(e){
+  if (e.keyCode == "65"){
+    svg.select(".overlay").style("visibility", "hidden");
+  }
+}
+
+//detects if the "a" key has been released
+function keyIsUp(e){
+  if(e.keyCode == "65"){
+    svg.select(".overlay").style("visibility", "visible");
+    svg2.selectAll("path")
+      .filter(function(d){return d['id'] == previousId; })
+      .transition()
+      .duration(50)
+      .style("fill", function(d) { 
+        //filling the selected states in with green to show they are selected
+        if (valueStorage[18] == previousId || valueStorage[19] == previousId || valueStorage[20] == previousId){
+          return "green";
+        } else {
+          if (obesityMap){
+            return color(rateById[previousId]);
+          } else if (diabetesMap){
+            return color(diabetesById[previousId]);
+          } else if (insecurityMap){
+            return color(insecurityById[previousId]);
+          } else if (noCarMap){
+            return color(houseLowById[previousId]);
+          } else {
+            return color(popuLowById[previousId])
+          }
+        }
+      });
+  }
+}
+
+//changes choropleth view to show the percentage of obesity variable
+function toObesity(){
+  obesityMap = true;
+  diabetesMap = insecurityMap = storeAccessMap = noCarMap = false;
+
+  color = d3.scale.threshold()
+    .domain([0, 10, 20, 30, 40])
+    .range(["#f2f0f7", "#dadaeb", "#bcbddc", "#9e9ac8", "#756bb1", "#54278f"]);
+  svg2.selectAll("path")
+    .style("fill", function(d) {
+      if (valueStorage[18] == d['id'] || valueStorage[19] == d['id'] || valueStorage[20] == d['id']){
+        return "green";
+      } else {
+        return color(rateById[d['id']]);
+      }
+    });
+
+  //Setting the colors and text for the ranges
+  document.getElementById('rect0').style.fill="#dadaeb";
+  document.getElementById('text0').textContent="0-10%";
+  document.getElementById('rect1').style.fill="#bcbddc";
+  document.getElementById('text1').textContent="10-20%";
+  document.getElementById('rect2').style.fill="#9e9ac8";
+  document.getElementById('text2').textContent="20-30%";
+  document.getElementById('rect3').style.fill="#756bb1";
+  document.getElementById('text3').textContent="30-40%";
+  document.getElementById('rect4').style.fill="#54278f";
+  document.getElementById('text4').textContent="40%+";
+
+  document.getElementById('obesity-button').className='pure-button pure-button-active';
+  document.getElementById('diabetes-button').className='pure-button';
+  document.getElementById('insecurity-button').className='pure-button';
+  document.getElementById('car-access-button').className='pure-button';
+  document.getElementById('store-access-button').className='pure-button';
+}
+
+//changes choropleth view to show the percentage of diabetes variable
+function toDiabetes(){
+  diabetesMap = true;
+  obesityMap = insecurityMap = storeAccessMap = noCarMap = false;
+  color = d3.scale.threshold()
+    .domain([0, 5, 10, 15, 20])
+    .range(["#ffefe5", "#ffe0cc", "#ffc199", "#ffa366", "#ff8433", "#e65c00"]);
+  svg2.selectAll("path")
+    .style("fill", function(d) {
+      if(valueStorage[18] == d['id'] || valueStorage[19] == d['id'] || valueStorage[20] == d['id']){
+        return "green";
+      } else {
+        return color(diabetesById[d['id']]);
+      }
+    });
+
+  //Setting the colors and text for the ranges
+  document.getElementById('rect0').style.fill="#ffe0cc";
+  document.getElementById('text0').textContent="0-5%";
+  document.getElementById('rect1').style.fill="#ffc199";
+  document.getElementById('text1').textContent="5-10%";
+  document.getElementById('rect2').style.fill="#ffa366";
+  document.getElementById('text2').textContent="10-15%";
+  document.getElementById('rect3').style.fill="#ff8433";
+  document.getElementById('text3').textContent="15-20%";
+  document.getElementById('rect4').style.fill="#e65c00";
+  document.getElementById('text4').textContent="20%+";
+
+  document.getElementById('obesity-button').className='pure-button';
+  document.getElementById('diabetes-button').className='pure-button pure-button-active';
+  document.getElementById('insecurity-button').className='pure-button';
+  document.getElementById('car-access-button').className='pure-button';
+  document.getElementById('store-access-button').className='pure-button';
+}
+
+//changes choropleth view to show the percentage of food insecurity variable
+function toInsecurity(){
+  insecurityMap = true;
+  diabetesMap = obesityMap = storeAccessMap = noCarMap = false;
+  color = d3.scale.threshold()
+    .domain([0, 5, 10, 15, 21])
+    .range(["#99ffff", "#33ffff", "#00cccc", "#009999", "#006666", "#003333"]);
+  svg2.selectAll("path")
+    .style("fill", function(d) {
+      if(valueStorage[18] == d['id'] || valueStorage[19] == d['id'] || valueStorage[20] == d['id']){
+        return "green";
+      } else {
+        return color(insecurityById[d['id']]);
+      }
+    });
+
+
+  //Setting the colors and text for the ranges
+  document.getElementById('rect0').style.fill="#33ffff";
+  document.getElementById('text0').textContent="0-5%";
+  document.getElementById('rect1').style.fill="#00cccc";
+  document.getElementById('text1').textContent="5-10%";
+  document.getElementById('rect2').style.fill="#009999";
+  document.getElementById('text2').textContent="10-15%";
+  document.getElementById('rect3').style.fill="#006666";
+  document.getElementById('text3').textContent="15-21%";
+  document.getElementById('rect4').style.fill="#003333";
+  document.getElementById('text4').textContent="21%+";
+
+  document.getElementById('obesity-button').className='pure-button';
+  document.getElementById('diabetes-button').className='pure-button';
+  document.getElementById('insecurity-button').className='pure-button pure-button-active';
+  document.getElementById('car-access-button').className='pure-button';
+  document.getElementById('store-access-button').className='pure-button';
+}
+
+
+//changes choropleth view to show the percentage of no car and low access to food variable
+function toCarAccess(){
+  noCarMap = true;
+  diabetesMap = obesityMap = storeAccessMap = insecurityMap = false;
+  color = d3.scale.threshold()
+    .domain([0, 5, 10, 15, 20])
+    .range(["#ffb3d9", "#ff66b3", "#ff3399", "#ff0080", "#b30059", "#660033"]);
+  svg2.selectAll("path")
+    .style("fill", function(d) {
+      if(valueStorage[18] == d['id'] || valueStorage[19] == d['id'] || valueStorage[20] == d['id']){
+        return "green";
+      } else {
+        return color(houseLowById[d['id']]);
+      }
+    });
+
+  //Setting the colors and text for the ranges
+  document.getElementById('rect0').style.fill="#ff66b3";
+  document.getElementById('text0').textContent="0-5%";
+  document.getElementById('rect1').style.fill="#ff3399";
+  document.getElementById('text1').textContent="5-10%";
+  document.getElementById('rect2').style.fill="#ff0080";
+  document.getElementById('text2').textContent="10-15%";
+  document.getElementById('rect3').style.fill="#b30059";
+  document.getElementById('text3').textContent="15-20%";
+  document.getElementById('rect4').style.fill="#660033";
+  document.getElementById('text4').textContent="20%+";
+
+  document.getElementById('obesity-button').className='pure-button';
+  document.getElementById('diabetes-button').className='pure-button';
+  document.getElementById('insecurity-button').className='pure-button';
+  document.getElementById('car-access-button').className='pure-button pure-button-active';
+  document.getElementById('store-access-button').className='pure-button';
+}
+
+//changes choropleth view to show the percentage of population and no access to store variable
+function toStoreAccess(){
+  storeAccessMap = true;
+  diabetesMap = obesityMap = noCarMap = insecurityMap = false;
+  color = d3.scale.threshold()
+    .domain([0, 20, 40, 60, 80])
+    .range(["#ffe080", "#ffcd33", "#ffc000", "#cc9900", "#997300", "#4d3a00"]);
+  svg2.selectAll("path")
+    .style("fill", function(d) {
+      if(valueStorage[18] == d['id'] || valueStorage[19] == d['id'] || valueStorage[20] == d['id']){
+        return "green";
+      } else {
+        return color(popuLowById[d['id']]);
+      }
+    });
+
+  //Setting the colors and text for the ranges
+  document.getElementById('rect0').style.fill="#ffcd33";
+  document.getElementById('text0').textContent="0-20%";
+  document.getElementById('rect1').style.fill="#ffc000";
+  document.getElementById('text1').textContent="20-40%";
+  document.getElementById('rect2').style.fill="#cc9900";
+  document.getElementById('text2').textContent="40-60%";
+  document.getElementById('rect3').style.fill="#997300";
+  document.getElementById('text3').textContent="60-80%";
+  document.getElementById('rect4').style.fill="#4d3a00";
+  document.getElementById('text4').textContent="80%+";
+
+  document.getElementById('obesity-button').className='pure-button';
+  document.getElementById('diabetes-button').className='pure-button';
+  document.getElementById('insecurity-button').className='pure-button';
+  document.getElementById('car-access-button').className='pure-button';
+  document.getElementById('store-access-button').className='pure-button pure-button-active';
+}
+
+
+
+/*
+* Function for clearing the radar graphs
+*/
+function clearGraph(){
+	
+  //clears the green selected counties from the map
+  svg2.selectAll("path")
+    .style("fill", function(d){
+        if (obesityMap){
+          return color(rateById[d['id']]);
+        } else if (diabetesMap){
+          return color(diabetesById[d['id']]);
+        } else if (insecurityMap){
+          return color(insecurityById[d['id']]);
+        } else if (noCarMap){
+          return color(houseLowById[d['id']]);
+        } else {
+          return color(popuLowById[d['id']])
+        }
+    });
+
+
+ //Clear county names at the top
+  d3.select("body").select(".dod1")
+      .select("p")
+      .html(
+        ""
+        );
+  d3.select("body").select(".dod2")
+      .select("p")
+      .html(
+        ""
+        );
+  d3.select("body").select(".dod3")
+      .select("p")
+      .html(
+        ""
+        );
+
+  //Reset layers and axes of Radar graph
+  numLayers = 0;
+  valueStorage = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+  RadarChart.draw("#chart",null);
+
+}
+
+
+</script>
+
+</body>

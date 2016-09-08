@@ -1,0 +1,170 @@
+/*
+* Styling for the info viz
+*
+*/
+
+path {
+  fill: #ccc;
+  stroke: #302B21;
+}
+
+.overlay {
+  fill: none;
+  pointer-events: visible;
+  stroke: none;
+  visibility: visible;
+}
+
+.boarder {
+  fill: none;
+  stroke: #fff;
+}
+
+.counties {
+  fill: none;
+  stroke-width: 0.5px;
+}
+
+.states {
+  fill: none;
+  stroke: #302B21;
+  stroke-linejoin: round;
+  stroke-width: 1.5px;
+}
+
+.data {
+  padding: 10px;
+  text-align: left;
+}
+
+text{
+  font-family: 'Raleway', sans-serif;
+}
+
+
+
+h1{
+  font-family: 'Raleway', sans-serif; 
+  color: #fff;
+  text-align: center;
+  padding-top: 1em;
+}
+
+h3{
+  font-family: 'Raleway', sans-serif;
+  color: #fff;
+  text-align: center;
+  padding-bottom: 2.5em;
+}
+
+#state-select{
+  height: 40px;
+}
+
+#search-field{
+  height: 35px;
+  margin-bottom: 2em;
+}
+
+#search{
+  padding-left: 2.5em;
+  color: #fff;
+  font-family: 'Raleway', sans-serif;
+  text-align: left;
+}
+
+#dod-text{
+  font-family: 'Raleway', sans-serif; 
+  color: #fff;
+  float: left;
+
+  vertical-align: top;
+  padding-bottom: 1em;
+}
+
+#map-controls{
+  display: table;
+  margin:0 auto;
+  padding: 1.5em;
+  padding-left: 2.5em;
+
+}
+
+#legend{
+  float:left;
+  margin: 1.5em 0em 1.5em 2em;
+}
+
+#obesity-button{
+  background: #756bb1;
+  color: #fff;
+  margin: 1.5em .5em 1.5em .2em;
+  float: left;
+}
+
+#diabetes-button{
+  background: #e65c00;
+  color: #fff;
+  margin: 1.5em .5em 1.5em .2em;
+  float: left;
+}
+
+#insecurity-button{
+  background: #009999;
+  color: #fff;
+  margin: 1.5em .5em 1.5em .2em;
+  float: left;
+}
+
+#car-access-button{
+  background: #ff3399;
+  color: #fff;
+  margin: 1.5em .5em 1.5em .2em;
+  float: left;
+}
+
+#store-access-button{
+  background: #cc9900;
+  color: #fff;
+  margin: 1.5em .5em 1.5em .2em;
+  float: left;
+}
+
+.legend{
+
+}
+
+.radar-chart .area {
+  fill-opacity: 0.5;
+  fill: #FFD700;
+}
+.radar-chart.focus .area.focused {
+  fill-opacity: 0.9;
+}
+.area.county, .county .circle {
+  fill: #FFD700;
+  stroke: none;
+}
+
+/*path:hover {
+  fill: #fff;
+}*/
+
+#map { 
+  height: 500px; 
+}
+
+body{
+  background: #302B21;
+}
+
+.tooltip {
+  background: #fff;
+  color: #202020;
+  border-radius: 5px;
+  position: absolute;
+  padding: 10px;
+  pointer-events: none;
+  text-align: left;
+  opacity: .25;
+}
