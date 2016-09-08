@@ -1,6 +1,7 @@
-# stuff-I-did-in-college
+# Projects
 
 This is a folder containing various projects I worked on in school.
+
 
 Health Map - A website containing a visualization of health information across the US
 
